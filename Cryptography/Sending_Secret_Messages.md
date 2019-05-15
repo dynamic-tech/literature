@@ -19,7 +19,7 @@ This article starts off by clearly showing the steps you need to send and receiv
 
 (TOC manually generated courtesy of [this generator](https://imthenachoman.github.io/nGitHubTOC/).)
 
-# Generating your key-pair
+# Generating Your Key-pair
 
 To send and receive secret messages, you will need to create a *cipher key*. Since we'll be using **public-key cryptography** (aka **asymmetric cryptography**, explained soon in next subsection), the relevenat term here is *key-pair*. If you're confused, just hold on to the term **key**, for now.
 
@@ -33,15 +33,36 @@ You can imagine such a **symmetric key** as having a one-to-one **substitution**
 
 Historically, the transport/delivery of a **symmetric key** is the weakest link in cryptography. The person(s) transporting said key(s) can easily be intercepted. Phone lines can be tapped. Tom Cruise (à la *Mision Impossible*) could wear a mask and appear exactly like your friendly university professor. The list of possible *key-loss scenarios* goes on.
 
-# OpenSSL Reference
+## OpenSSL and LibreSSL
 
-The man pages are consolidated [on OpenSSL's official site](https://www.openssl.org/docs/manmaster/man1/).
+We use OpenSSL, the man(ual) pages of which are consolidated [on OpenSSL's official site](https://www.openssl.org/docs/manmaster/man1/).
 
-## Which OpenSSL Implementation?
-
-[LibreSSL](https://www.libressl.org). Current version of this writing is `2.9.1`.
+The actual implementation of OpenSSL we will use is [LibreSSL](https://www.libressl.org). Current version of this writing is `2.9.1`.
 
     openssl version
+    # Should show 'LibreSSL 2.9.1'.
+
+## Generate Key-Pair in PEM Format
+
+    openssl genpkey \
+      -algorithm RSA \
+      -out key.pem \
+      -aes-256-cbc \
+      -pass stdin
+
+Command `openssl genpkey` generates a private key.
+
+Option `-algorithm RSA` chooses the RSA algorithm for key-pair generation; there's no need to understand why `RSA` is used here.
+
+Option `-out key.pem` outputs the generated key-pair to a file named `key.pem`. PEM is the default output format, and is the format we want. You might want to use your key to send encrypted emails later, which is why it's best to stick to the PEM format now.
+
+Option `-aes-256-cbc` encrypts the output key-pair using cipher *AES* with key length of *256 bits* and mode of operation *Cipher Block Chaining* (CBC). There's no real need to understand any of that, except that `aes-256-cbc` is the easiest and safest cipher to use. If you're interested to know what ciphers (aka *cryptography algorithms*) are supported, feel free to query such:
+
+    openssl list-cipher-algorithms
+
+Option `-pass stdin` tells `openssl` to perform the encryption of the key-pair using the passphrase you will enter via `stdin` (keyboard).
+
+TODO: Should we explain that passing in the password on the command-line (eg `-pass pass:my_password`) will leak the password to a `ps` snoop? Or just leave it as an instruction without further messy explanations?
 
 # Sending Encrypted Messages
 
@@ -83,6 +104,8 @@ Encrypt the *encryption key* with your *public key*. This simulates you encrypti
 
 **Default Input Key Type.** Of special note is the `-inkey <public-key.pem> -pubin` phrase. It indicates that the input key file is a public key. By default, [the command](https://www.openssl.org/docs/manmaster/man1/rsautl.html) `openssl rsautl` expects the input key file to be a private key.
 
+TODO: Use `pkeyutl` instead.
+
 ## Encrypt the Message
 
 Now, we encrypt the secret message with our *encryption key*.
@@ -93,7 +116,7 @@ Now, we encrypt the secret message with our *encryption key*.
 
 We will now refer to [the man page](https://www.openssl.org/docs/manmaster/man1/enc.html) for `openssl enc`.
 
-**Cipher to Use.** As per the man page, the easiest and safest cipher to use is the [AES block cipher](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard) in [CFB mode](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_Block_Chaining_(CBC)) using the longest key length of 256 bits.
+**Cipher to Use.** As per the man page, the easiest and safest cipher to use is the [AES block cipher](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard) in [CBC mode](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_Block_Chaining_(CBC)) using the longest key length of 256 bits.
 
 **Salting** is required to prevent dictionary attacks.
 
@@ -111,6 +134,8 @@ Use the private key to decrypt the *encryption key*. Note that the *encryption k
       -inkey id_rsa.pem \
       -in data.key.enc -out received.key
 
+TODO: Use `pkeyutl` instead.
+
 ## Decrypt the Message
 
 Use the *encryption key* to decrypt the encrypted message.
@@ -121,6 +146,26 @@ Use the *encryption key* to decrypt the encrypted message.
 
 ---
 
+# Never Encrypt Voluminous Data with Public Key
+
+Even though the *deterministic* RSA algorithm has been made *probabilistic* with pseudorandom padding (**PKCS 1.5**), we should still not assume that attacks will not be invented in the future.
+
+(*Deterministic* in this case simply means `some-same-gibberish` always decrypts into `some-same-plaintext`.)
+
+Hence, we should never encrypt actual data with our public key, especially when such data has **predictable patterns**. Natural language has lots of predictable patterns, and so does numerous file or data formats.
+
+---
+
 TODO: Use "*known-plaintext attack*" to explain why we should not use the public key to encrypt secret messages.
 
 TODO: Mention the Claude Shannon's "*confusion and diffusion*"? Will that require too much logic skills from readers?
+
+TODO: Mention deterministc RSA ("*Textbook RSA*") and padding? Theoretically, even the the OAEP-padded *PKCS encryption/decryption scheme* (**PKCS 2.0**) is susceptible to attack, let alone the default padding (**PKCS 1.5**) used by `openssl`. Mention that we can "*never be too sure that PKCS 1.5 or 2.0 won't ever be attacked*" by *Chosen Ciphertext Attack*, or worse, by *Chose/Known Plaintext Attack*?
+
+[Manger, 2001](https://link.springer.com/content/pdf/10.1007/3-540-44647-8_14.pdf). *Chosen Ciphertext Attack* on PKCS 2.0.
+
+[Bleichenbacher, 1998](https://link.springer.com/content/pdf/10.1007%2FBFb0055716.pdf). *Chosen Ciphertext Attack* on PKCS 1.5.
+
+TODO: Mention that **PKCS 1.5** padding cannot be attacked without *oracles*? Explain *oracles*? Seems too deep into the rabbit hole. Need to find an easier way to explain why "*PKCS 1.5 is secure for offline encryption/decryption*".
+
+TODO: I think it's best we don't go anywhere near **semantic security** (aka **IND-CPA**). Maybe we can explain more cybersecurity concepts *in future installments* if interested readers ask for more.
