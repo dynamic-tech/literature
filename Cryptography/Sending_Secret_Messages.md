@@ -44,17 +44,21 @@ The actual implementation of OpenSSL we will use is [LibreSSL](https://www.libre
 
 ## Generate Key-Pair in PEM Format
 
+Enter the following command into your shell. The command will prompt you for a passphrase that locks/unlocks the key to be generated. Enter an easy-to-remember passphrase, because this passphrase is a *local password* that will never exit your computer through any wire/network. (We'll write more about *local passwords* vs *networked passwords* in future articles on cybersecurity.)
+
     openssl genpkey \
       -algorithm RSA \
-      -out key.pem \
+      -out id_rsa.pem \
       -aes-256-cbc \
       -pass stdin
 
+We take a closer look at the individual parts of the above command.
+
 Command `openssl genpkey` generates a private key.
 
-Option `-algorithm RSA` chooses the RSA algorithm for key-pair generation; there's no need to understand why `RSA` is used here.
+Option `-algorithm RSA` chooses the RSA algorithm for key-pair generation. There's no need to understand why `RSA` is used here. Just know that `RSA` is the current standard algorithm for [public-key cryptography](https://en.wikipedia.org/wiki/Public-key_cryptography).
 
-Option `-out key.pem` outputs the generated key-pair to a file named `key.pem`. PEM is the default output format, and is the format we want. You might want to use your key to send encrypted emails later, which is why it's best to stick to the PEM format now.
+Option `-out id_rsa.pem` outputs the generated key-pair to a file named `id_rsa.pem`. PEM is the default output format, and is the format we want. You might want to use your key to send encrypted emails later, which is why it's best to stick to the PEM format now.
 
 Option `-aes-256-cbc` encrypts the output key-pair using cipher *AES* with key length of *256 bits* and mode of operation *Cipher Block Chaining* (CBC). There's no real need to understand any of that, except that `aes-256-cbc` is the easiest and safest cipher to use. If you're interested to know what ciphers (aka *cryptography algorithms*) are supported, feel free to query such:
 
@@ -153,6 +157,40 @@ Even though the *deterministic* RSA algorithm has been made *probabilistic* with
 (*Deterministic* in this case simply means `some-same-gibberish` always decrypts into `some-same-plaintext`.)
 
 Hence, we should never encrypt actual data with our public key, especially when such data has **predictable patterns**. Natural language has lots of predictable patterns, and so does numerous file or data formats.
+
+# CBC is still safe if used locally
+
+There's no need to use GCM. In fact, GCM implemented poorly can fail catastrophically. If in doubt, just use CBC. We're using CBC locally, so it is safe.
+
+CBC can only be cracked if the *adversary* (terminology for "*attacker*" in cybersecurity) has access the private key of the *challenger* ("*attacked party*" in cybersecurity). In a typical attack setup, the *adversary* relies on the *challenger* to have set up a server that responds to the *adversary*'s requests to decrypt any desired ciphertext (a functionality served as a *web service*). This server must function insecurely such that it acts as an [oracle](https://en.wikipedia.org/wiki/Test_oracle). What is an *oracle*?
+
+## Oracle in cyberattacks
+
+An *oracle* is a machine that "*answers questions/queries deterministically*". The key word here is "*deterministically*", so that the *adversary* can still fish for information that the machine was programmed to hide and protect.
+
+Attacker: "*Where is your location?*"
+Oracle: "*I cannot reveal my location to you.*"
+Attacker: "*Are you in Silicon Valley?*"  (brute force search/attack)
+Oracle: "*No.*"
+Attacker: "*How long does it take my data packet to reach you?*" (timing attack)
+Oracle: "*Over 2000 milliseconds, so you should be halfway around the world!*"
+
+The above will only let the *adversary* find the location of the *challenger*'s server. Cracking the CBC requires some mathematics ([propositional calculus](https://en.wikipedia.org/wiki/Propositional_calculus)), plus some algorithm skills. Here's a quick and superficial look at how it is done, and the weakness in the above-mentioned *oracle*.
+
+## Don't Say You're Not At Home!?
+
+As complex as cybersecurity may seem, the concepts are really mere common sense. Consider briefly how the [Mastermind board game](https://en.wikipedia.org/wiki/Mastermind_(board_game)) works before you dive into this explanation.
+
+The *oracle* holds the *private key* required to decrypt incoming ciphertexts. One of the *oracle*'s functionalities is presumably to:
+
+1. Decrypt incoming ciphertexts. (eg, end-users send their data encrypted)
+2. Store the plaintext, presumably data, in a database.
+
+The *oracle*, providing such a functionality through the web, receives a ciphertext from the *adversary* and dutifully decrypts the ciphertext with the *private key*.
+
+The problem arises when this *oracle* responds with "*invalid ciphertext, padding incorrect*" when the *adversary* sends in a modified version of a valid ciphertext. The *adversary* can thus, using mathematics and algorithm, send in incrementally (byte by byte) modified versions of the ciphertext and effectively decrypt the ciphertext completely (ie, deduce the secret message).
+
+As can be seen, the *adversary* has access to the *private key*, though indirectly. In our use case, our *private key* is never exposed in this way through a *web service*.
 
 ---
 
